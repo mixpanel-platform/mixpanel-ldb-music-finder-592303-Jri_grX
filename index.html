@@ -7,9 +7,286 @@
     <script src="https://cdn.mxpnl.com/libs/mixpanel-platform/build/mixpanel-platform.v0.latest.min.js"></script>
   </head>
   <body class="mixpanel-platform-body">
-    <h1>Hello, World!</h1>
+    <h1>A/B Test: Experiment Detail</h1>
+    <div id="experiment">
+      <p>Experiment (People Property Name)</p>
+      <div id="experiment-select"></div>
+      <p>Experiment Name (Event Property)</p>
+      <div id="prop-select"></div>
+      <p>Conversion Event 1</p>
+      <div id="conversion-eventa"></div>
+      <p>Conversion Event 2</p>
+      <div id="conversion-eventb"></div>
+      <div id="funnela"></div>
+      <div id="tablea"></div>
+      <div id="funnelb"></div>
+      <div id="tableb"></div>
+    </div>
+    <style>
+      h1 {
+        font-size: 22px;
+        margin-bottom: 16px;
+      }
+      h2 {
+        font-size: 16px;
+      }
+      #experiment {
+        display: none;
+      }
+      .left, .right {
+        width: 40%;
+      }
+      .report {
+        margin: 15px 0 0;
+      }
+    </style>
     <script>
-      // Run queries and display results here
+      // LDB NOTES
+      // add property selector(s?) to conversion event dropdowns
+      // add monetization goal - always using average first payment amount for each of variants - maybe we'll have the first conversion be first payment and the second conversion be whatever event they choose (which can change)?
+      // add date picker and maybe funnel conversion length e.g., 14 days?
+      // need total users in each experiment in the table also? those that were set to get the experiment vs. those that actually viewed the experiment...? or are people properties and events sent at the same time
+      // add css
+      // nice to haves: duration (first time experiment viewed with that experiment name property was fired) and retention (has that person also paid in the last 30 days)
+
+    
+    
+    
+      var numExperiments = 0,
+          peopleProps = {
+            items: [
+              {label: "-- Select an experiment (people properties) --", value: "select"}
+            ]
+          },
+          eventPropValues = {
+            items: [
+              {label: '-- Select experiment name ("Experiment Viewed" event properties) --', value: "select"}
+            ]
+          },
+          experimentSelects = [],
+          eventSelects = [],
+          conversionSelects = {},
+          funnelSelects = {},
+          tableSelects = {};
+          
+      function addExperiment(i) {
+        content = '<div id="experiment' + i + '"><h2>Experiment ' + i + '</h2><div class="left"><p>Experiment (People Property Name)</p><div id="experiment-select' + i + '"></div><p>Experiment Name (Event Property)</p><div id="prop-select' + i + '"></div></div><div class="right"><p>Conversion Event 1</p><div id="conversion-event' + i + 'a"></div><p>Conversion Event 2</p><div id="conversion-event' + i + 'b"></div></div><div class="report" id="funnel' + i + 'a"></div><div class="report" id="table' + i + 'a"></div><div class="report" id="funnel' + i + 'b"></div><div class="report" id="table' + i + 'b"></div></div>'
+        $('body').append(content);
+        
+        // query People to create the dropdown of people properties
+        MP.api.query('/api/2.0/engage/properties').done(function(json) {
+          for (property in json.results) {
+            peopleProps.items.push({label: property, value: property});
+          }
+          experimentSelects[i] = $('#experiment-select' + i).MPSelect(peopleProps);
+        });
+        
+        // query property values for experiment names on the Experiment Viewed event to create dropdown of event properties
+        eventParameters = {event: "Experiment Viewed", name: "experiment name", limit: 255}
+        MP.api.query('api/2.0/events/properties/values', eventParameters).done(function(array) {
+          for (property in array) {
+            eventPropValues.items.push({label: array[property], value: array[property]});
+          }
+          eventSelects[i] = $('#prop-select' + i).MPSelect(eventPropValues);
+        });
+        
+        // create event dropdowns
+        conversionSelects[i] = {};
+        conversionSelects[i]['a'] = $('#conversion-event' + i + 'a').MPEventSelect();
+        conversionSelects[i]['b'] = $('#conversion-event' + i + 'b').MPEventSelect();
+
+        // 
+        funnelSelects[i] = {};
+        funnelSelects[i]['a'] = $('#funnel' + i + 'a').MPChart({chartType: 'line'});
+        funnelSelects[i]['b'] = $('#funnel' + i + 'b').MPChart({chartType: 'line'});
+
+        // 
+        tableSelects[i] = {};
+        tableSelects[i]['a'] = $('#table' + i + 'a').MPTable();
+        tableSelects[i]['b'] = $('#table' + i + 'b').MPTable();
+
+      }
+      
+      function calcStats(total0, success0, total1, success1) {
+        
+        var conv0 = success0 / total0,
+            conv1 = success1 / total1;
+
+        if (!isNaN(conv1) && !isNaN(conv0) && conv0 != 0) {
+          
+          var improvement = (conv1 - conv0) / conv0;
+          if (!isNaN(improvement) && improvement !== Infinity) {
+            improvement = (improvement * 100).toFixed(1) + '%';
+            if (improvement > 0) {
+              improvement = '+' + improvement;
+            }
+          }
+          
+          var se0 = Math.sqrt(conv0*(1-conv0)/total0),
+              se1 = Math.sqrt(conv1*(1-conv1)/total1),
+              ci = '(±' + (1.96 * se1).toFixed(2) + '%)',
+              zscore = ((conv1 - conv0) / Math.sqrt(Math.pow(se1,2) + Math.pow(se0,2))),
+              // the following is from http://picomath.org/javascript/phi.js.html
+              // constants
+              a1 = 0.254829592,
+              a2 = -0.284496736,
+              a3 =  1.421413741,
+              a4 = -1.453152027,
+              a5 =  1.061405429,
+              p  =  0.3275911;
+
+          // save the sign of zscore
+          var sign = 1;
+          if (zscore < 0) {
+            sign = -1
+          }
+          zscore = Math.abs(zscore)/Math.sqrt(2.0);
+          
+          // A&S formula 7.1.26
+          var t = 1.0/(1.0 + p*zscore);
+          var y = 1.0 - (((((a5*t + a4)*t) + a3)*t + a2)*t + a1)*t*Math.exp(-zscore*zscore);
+          
+          var chance = 0.5*(1.0 + sign*y),
+              significance = '--';
+          
+          if (total1 < 10) {
+            ///////////////////////// $.noop(); jQuery17108188365634996444_1434226980400???????????
+            chance = 'Sample size too small'
+          }
+          else if (chance >= 0.95) {
+            significance = 'Win'
+          }
+          else if (chance <= 0.05) {
+            significance = 'Lose'
+          }
+          else if (0.95 > chance > 0.05) {
+            significance = 'Requires 95% significance'
+          }
+          
+          if (!isNaN(chance)) {
+            chance = (chance * 100).toFixed(1) + '%';
+          }
+          
+          var variant_stats = [improvement, ci, chance, significance];
+        }
+        
+        else if (conv0 == 0) {
+          var variant_stats = ['Conversion of original cannot equal 0', '', 'N/A', 'N/A'];
+        }
+        else {
+          var variant_stats = ['N/A', '', 'N/A', 'N/A']
+        }
+        
+        return variant_stats;
+        
+      }
+      
+      function runQuery(exp) {
+        var experiment = experimentSelects[exp].MPSelect('value'),
+            experimentEvent = eventSelects[exp].MPSelect('value'),
+            conversion1 = conversionSelects[exp]['a'].MPEventSelect('value'),
+            conversion2 = conversionSelects[exp]['b'].MPEventSelect('value'),
+            people = {};
+            
+        MP.api.people().done(function(json0) {
+
+          parameters = {'session_id': json0.values().session_id, 'page': 0};
+          has_results = true;
+          
+          peopleObject = json0;
+          
+          while (has_results) {
+            profiles = peopleObject.values().results;
+            for (var profile in profiles) {
+              if (profiles.hasOwnProperty(profile)) {
+                if (profiles[profile].$properties.hasOwnProperty(experiment)) {
+                  var distinct = profiles[profile].$distinct_id;
+                  var experimentValue = profiles[profile].$properties[experiment];
+                  people[distinct] = experimentValue;
+                }
+              }
+            }
+            has_results = Object.keys(profiles).length == 1000;
+            parameters['page'] ++;
+            
+            if (has_results) {
+              MP.api.people(parameters).done(function(json) {
+                peopleObject = json;
+              });
+            }
+          }
+          
+          console.log(people);
+
+        });
+        
+        var funnelParameters = {
+          segment: 'variant name'
+        }
+        MP.api.funnel({event: 'Experiment Viewed', selector: 'properties["experiment name"] == "' + experimentEvent + '"'}, conversion1, funnelParameters).done(function(results) {
+          var funnelObject = {},
+              tableObject = {};
+
+          for (variant in results) {
+            funnelObject[variant] = {};
+            tableObject[variant] = {'Experiment Viewed':0};
+            tableObject[variant][conversion1] = 0;
+            
+            for (date in results[variant]) {
+              funnelObject[variant][date] = results[variant][date][1].overall_conv_ratio;
+              tableObject[variant]['Experiment Viewed'] += results[variant][date][0].count;
+              tableObject[variant][conversion1] += results[variant][date][1].count;
+            }
+            var conversion = tableObject[variant][conversion1] / tableObject[variant]['Experiment Viewed'];
+            if (!isNaN(conversion)) {
+              tableObject[variant]['~Conversion'] = (conversion * 100).toFixed(2) + '%';
+            }
+            else {
+              tableObject[variant]['~Conversion'] = 'N/A';
+            }
+          }
+
+          for (variant in tableObject) {
+            var origTotal = tableObject['Original']['Experiment Viewed'],
+                origSuccess = tableObject['Original'][conversion1],
+                varTotal = tableObject[variant]['Experiment Viewed'],
+                varSuccess = tableObject[variant][conversion1];
+            
+            stats = calcStats(origTotal, origSuccess, varTotal, varSuccess);
+            tableObject[variant]['~~Improvement'] = stats[0];
+            tableObject[variant]['~Conversion'] += " " + stats[1];
+            tableObject[variant]['~~~Chance to Beat Original'] = stats[2];
+            tableObject[variant]['~~~Result (only if significant)'] = stats[3];
+          }
+
+          tableObject['$overall']['~~Improvement'] = 'N/A'
+          tableObject['$overall']['~~~Chance to Beat Original'] = 'N/A'
+          tableObject['$overall']['~~~Result (only if significant)'] = 'N/A'
+          tableObject['Original']['~~Improvement'] = 'N/A'
+          tableObject['Original']['~~~Chance to Beat Original'] = 'N/A'
+          tableObject['Original']['~~~Result (only if significant)'] = 'N/A'
+          
+          funnelSelects[exp]['a'].MPChart('setData', funnelObject);
+          tableSelects[exp]['a'].MPTable('setData', tableObject);
+          
+        })
+  
+        console.log($.contains($('body'), $('#experiment' + exp+1)));
+        if ($.contains($('body'), $('#experiment' + exp+1))) {
+          console.log('trueeeee');
+        }
+        else {
+          addExperiment(exp+1);
+        }
+      }
+      
+      addExperiment(1);
+      
+      $('#conversion-event1a').on('change', function() {
+        runQuery(1);
+      })
+      
+
     </script>
   </body>
 </html>
