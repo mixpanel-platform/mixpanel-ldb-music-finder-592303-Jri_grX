@@ -112,12 +112,21 @@
         var conv0 = success0 / total0,
             conv1 = success1 / total1;
 
-        if (!isNaN(conv1) && !isNaN(conv0) && conv0 != 0) {
-          
+        if ( isNaN(conv1) || isNaN(conv0) ) {
+          var variant_stats = ['N/A', '', 'N/A', '']
+        }
+        else if ( conv0 == 0 ) {
+          var variant_stats = ['Conversion of original cannot equal 0', '', 'N/A', ''];
+        }
+        else {
           var improvement = (conv1 - conv0) / conv0;
-          if (!isNaN(improvement) && improvement !== Infinity) {
+          if (isNaN(improvement) || improvement == Infinity) {
+            $.noop();
+          }
+          else {
             improvement = (improvement * 100).toFixed(1) + '%';
             if (improvement > 0) {
+              console.log('yes');
               improvement = '+' + improvement;
             }
           }
@@ -142,39 +151,33 @@
           }
           zscore = Math.abs(zscore)/Math.sqrt(2.0);
           
-          // A&S formula 7.1.26
           var t = 1.0/(1.0 + p*zscore);
           var y = 1.0 - (((((a5*t + a4)*t) + a3)*t + a2)*t + a1)*t*Math.exp(-zscore*zscore);
           
           var chance = 0.5*(1.0 + sign*y),
-              significance = '--';
+              result = '--';
           
           if (total1 < 10) {
-            ///////////////////////// $.noop(); jQuery17108188365634996444_1434226980401???????????
             chance = 'Sample size too small'
           }
           else if (chance >= 0.95) {
-            significance = 'Win'
+            result = 'Win'
           }
           else if (chance <= 0.05) {
-            significance = 'Lose'
+            result = 'Lose'
           }
           else if (0.95 > chance > 0.05) {
-            significance = 'Requires 95% significance'
+            result = 'Not Significant'
           }
           
-          if (!isNaN(chance)) {
+          if (isNaN(chance)) {
+            $.noop();
+          }
+          else {
             chance = (chance * 100).toFixed(1) + '%';
           }
           
-          var variant_stats = [improvement, ci, chance, significance];
-        }
-        
-        else if (conv0 == 0) {
-          var variant_stats = ['Conversion of original cannot equal 0', '', 'N/A', 'N/A'];
-        }
-        else {
-          var variant_stats = ['N/A', '', 'N/A', 'N/A']
+          var variant_stats = [improvement, ci, chance, result];
         }
         
         return variant_stats;
