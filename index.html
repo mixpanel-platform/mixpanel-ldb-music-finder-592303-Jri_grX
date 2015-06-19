@@ -14,13 +14,8 @@
       <p>Experiment Name (Event Property)</p>
       <div id="prop-select"></div>
       <p>Conversion Event 1</p>
-      <div id="conversion-eventa"></div>
-      <p>Conversion Event 2</p>
-      <div id="conversion-eventb"></div>
-      <div id="funnela"></div>
-      <div id="tablea"></div>
-      <div id="funnelb"></div>
-      <div id="tableb"></div>
+      <div id="conversion-event"></div>
+      <div id="table"></div>
     </div>
     <style>
       h1 {
@@ -41,26 +36,16 @@
       }
     </style>
     <script>
-      // LDB NOTES
-      // add property selector(s?) to conversion event dropdowns
-      // add monetization goal - always using average first payment amount for each of variants - maybe we'll have the first conversion be first payment and the second conversion be whatever event they choose (which can change)?
-      // add date picker and maybe funnel conversion length e.g., 14 days?
-      // need total users in each experiment in the table also? those that were set to get the experiment vs. those that actually viewed the experiment...? or are people properties and events sent at the same time
-      // add css
-      // nice to haves: duration (first time experiment viewed with that experiment name property was fired) and retention (has that person also paid in the last 30 days)
-
-    
-    
     
       var numExperiments = 0,
           peopleProps = {
             items: [
-              {label: "-- Select an experiment (people properties) --", value: "select"}
+              {label: "-- Select an experiment --", value: "select"}
             ]
           },
           eventPropValues = {
             items: [
-              {label: '-- Select experiment name ("Experiment Viewed" event properties) --', value: "select"}
+              {label: '-- Select an experiment --', value: "select"}
             ]
           },
           experimentSelects = [],
@@ -280,12 +265,15 @@
         }
         else {
           addExperiment(exp+1);
+          $('conversion-event' + exp+1).on('change', function() {
+            runQuery(exp+1)
+          })
         }
       }
       
       addExperiment(1);
       
-      $('#conversion-event1a').on('change', function() {
+      $('#conversion-event1').on('change', function() {
         runQuery(1);
       })
       
